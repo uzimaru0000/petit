@@ -1,4 +1,4 @@
-# kuon-cli
+# petit
 
 A CLI Twitter client using [kuon](https://github.com/hppRC/kuon)
 
@@ -6,7 +6,7 @@ A CLI Twitter client using [kuon](https://github.com/hppRC/kuon)
 
 ```bash
 # Login for twitter
-$ kuon login
+$ petit login
 # Tweet
-$ kuon tweet "This is tweet from CLI"
+$ petit tweet "This is tweet from CLI"
 ```
