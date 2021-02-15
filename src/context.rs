@@ -1,10 +1,14 @@
-use std::{fs::File, io::BufReader, path::PathBuf};
-
 use anyhow::Result;
 use kuon::{OAuthToken, TwitterAPI};
+use std::path::PathBuf;
+use tokio::fs::File;
+use tokio::io::{stdout, BufReader, BufWriter, Stdout};
+
+use crate::utils::read;
 
 pub struct Context {
     pub client: Option<kuon::TwitterAPI>,
+    pub stdout: BufWriter<Stdout>,
     pub api_key: String,
     pub api_secret: String,
 }
@@ -14,9 +18,11 @@ impl Context {
         let api_key = std::env::var("API_KEY")?;
         let api_secret = std::env::var("API_SECRET_KEY")?;
         let client = Self::build_client(&api_key, &api_secret).await;
+        let stdout = BufWriter::new(stdout());
 
         Ok(Self {
             client,
+            stdout,
             api_key,
             api_secret,
         })
@@ -34,9 +40,10 @@ impl Context {
     }
 
     async fn build_client(api_key: &str, api_secret: &str) -> Option<kuon::TwitterAPI> {
-        let file = File::open(Self::oauth_token_path()).ok()?;
-        let reader = BufReader::new(file);
-        let oauth_token: OAuthToken = serde_json::from_reader(reader).ok()?;
+        let file = File::open(Self::oauth_token_path()).await.ok()?;
+        let mut reader = BufReader::new(file);
+        let json = read(&mut reader).await.ok()?;
+        let oauth_token: OAuthToken = serde_json::from_str(&json).ok()?;
         let client = TwitterAPI::builder()
             .api_key(api_key)
             .api_secret_key(api_secret)

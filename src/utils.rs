@@ -1,19 +1,17 @@
-use io::{BufRead, Read, Write};
-use std::io;
+use anyhow::Result;
+use tokio::io::{AsyncReadExt, BufReader};
 
-pub fn read<R: io::Read>(reader: &mut io::BufReader<R>) -> io::Result<String> {
+pub async fn read<R: AsyncReadExt + std::marker::Unpin>(
+    reader: &mut BufReader<R>,
+) -> Result<String> {
     let mut buf = String::new();
-    reader.read_to_string(&mut buf)?;
+    reader.read_to_string(&mut buf).await?;
     Ok(buf)
 }
 
-pub fn read_line<R: io::Read>(reader: &mut io::BufReader<R>) -> io::Result<String> {
+pub fn read_stdin() -> Result<String> {
     let mut buf = String::new();
-    reader.read_line(&mut buf)?;
+    let mut stdin = std::io::stdin();
+    stdin.read_line(&mut buf)?;
     Ok(buf)
-}
-
-pub fn write<W: io::Write>(writer: &mut io::BufWriter<W>, content: &[u8]) -> io::Result<()> {
-    writer.write_all(content)?;
-    Ok(())
 }
