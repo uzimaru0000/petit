@@ -1,5 +1,7 @@
 # petit
 
+![](./petit.png)
+
 A CLI Twitter client using [kuon](https://github.com/hppRC/kuon)
 
 # How to use
