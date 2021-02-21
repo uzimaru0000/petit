@@ -1,4 +1,4 @@
-use crate::{context::Context, utils::read_stdin};
+use crate::{context::Context, utils::stdio::read_stdin};
 use anyhow::Result;
 use clap::Clap;
 use kuon::{Callback, OAuthRequestToken, OAuthToken, TwitterAPI};

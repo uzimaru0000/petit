@@ -2,13 +2,12 @@ use anyhow::Result;
 use kuon::{OAuthToken, TwitterAPI};
 use std::path::PathBuf;
 use tokio::fs::File;
-use tokio::io::{stdout, BufReader, BufWriter, Stdout};
+use tokio::io::BufReader;
 
-use crate::utils::read;
+use crate::utils::stdio::read;
 
 pub struct Context {
     pub client: Option<kuon::TwitterAPI>,
-    pub stdout: BufWriter<Stdout>,
     pub api_key: String,
     pub api_secret: String,
 }
@@ -18,11 +17,9 @@ impl Context {
         let api_key = std::env::var("API_KEY")?;
         let api_secret = std::env::var("API_SECRET_KEY")?;
         let client = Self::build_client(&api_key, &api_secret).await;
-        let stdout = BufWriter::new(stdout());
 
         Ok(Self {
             client,
-            stdout,
             api_key,
             api_secret,
         })

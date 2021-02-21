@@ -11,7 +11,7 @@ pub async fn read<R: AsyncReadExt + std::marker::Unpin>(
 
 pub fn read_stdin() -> Result<String> {
     let mut buf = String::new();
-    let mut stdin = std::io::stdin();
+    let stdin = std::io::stdin();
     stdin.read_line(&mut buf)?;
     Ok(buf)
 }
