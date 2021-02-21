@@ -10,9 +10,8 @@ use kuon::{Tweet, TwitterAPI};
 use maplit::hashmap;
 use termion::event::Key;
 use tui::{
-    layout::{Constraint, Layout, Rect},
-    style::{Color, Modifier, Style},
-    widgets::{Block, BorderType, Borders, Gauge, Paragraph},
+    layout::Rect,
+    widgets::{Block, BorderType, Borders, Paragraph},
 };
 
 const ENDPOINT: &str = "https://api.twitter.com/1.1/statuses/home_timeline.json";
@@ -35,24 +34,8 @@ impl TimeLine {
         loop {
             terminal.draw(|f| {
                 let size = f.size();
-                let chunk = Layout::default()
-                    .margin(1)
-                    .constraints([Constraint::Length(3), Constraint::Min(3)].as_ref())
-                    .split(size);
-
-                let gauge = Gauge::default()
-                    .block(Block::default().borders(Borders::ALL).title("Refetch"))
-                    .gauge_style(
-                        Style::default()
-                            .fg(Color::White)
-                            .bg(Color::Black)
-                            .add_modifier(Modifier::ITALIC),
-                    )
-                    .percent((count as f32 / 60f32 * 100f32) as u16);
-                let tweet = Self::render(&tweet_list, &chunk[1], (0, count));
-
-                f.render_widget(gauge, chunk[0]);
-                f.render_widget(tweet, chunk[1]);
+                let tweet = Self::render(&tweet_list, &size, (offset, 0));
+                f.render_widget(tweet, size);
             })?;
 
             match events.next().await.with_context(|| "Events error")? {
@@ -80,15 +63,15 @@ impl TimeLine {
     }
 
     async fn get_tweet(client: &TwitterAPI, since_id: Option<String>) -> Result<Vec<Tweet>> {
-        let params = since_id
+        let mut params = since_id
             .as_deref()
             .map(|x| {
                 hashmap! {
-                    "count" => "200",
                     "since_id" => x
                 }
             })
             .unwrap_or_default();
+        params.insert("count", "200");
 
         let tweet_list: Vec<kuon::Tweet> = client.raw_get(ENDPOINT, &params, None).await?;
         Ok(tweet_list)
