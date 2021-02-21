@@ -4,6 +4,7 @@ use clap::Clap;
 use crate::context::Context;
 
 mod login;
+mod search;
 mod timeline;
 mod tweet;
 
@@ -13,6 +14,7 @@ pub enum SubCommand {
     Tweet(tweet::Tweet),
     #[clap(name = "tl")]
     TimeLine(timeline::TimeLine),
+    Search(search::Search),
 }
 
 impl SubCommand {
@@ -21,6 +23,7 @@ impl SubCommand {
             SubCommand::Login(login) => login.run(ctx).await?,
             SubCommand::Tweet(tweet) => tweet.run(ctx).await?,
             SubCommand::TimeLine(tl) => tl.run(ctx).await?,
+            SubCommand::Search(search) => search.run(ctx).await?,
         }
 
         Ok(())

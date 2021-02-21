@@ -1,9 +1,9 @@
+use crate::component::Component;
 use crate::context::Context;
 use crate::utils::{
     event::{Event, Events},
     terminal::create_terminal,
 };
-use crate::widget::Widget;
 use anyhow::{Context as _, Result};
 use clap::Clap;
 use kuon::{Tweet, TwitterAPI};

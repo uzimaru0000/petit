@@ -1,7 +1,4 @@
-use std::collections::HashMap;
-
-use crate::utils::img::{Config, Image, Size};
-use crate::widget::{StatefulWidget, Widget};
+use crate::component::Component;
 use kuon::Tweet;
 use tui::{
     layout::Rect,
@@ -41,7 +38,7 @@ fn tweet_view<'a>(tweet: &Tweet) -> Vec<Spans<'a>> {
     ]
 }
 
-impl<'a> Widget<Paragraph<'a>> for Vec<Tweet> {
+impl<'a> Component<Paragraph<'a>> for Vec<Tweet> {
     fn view(&self, _area: &Rect) -> Paragraph<'a> {
         let tweets = self.iter().flat_map(|x| tweet_view(x)).collect::<Vec<_>>();
 
