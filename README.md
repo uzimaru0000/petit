@@ -2,7 +2,15 @@
 
 ![](./petit.png)
 
-A CLI Twitter client using [kuon](https://github.com/hppRC/kuon)
+A TUI Twitter client using [kuon](https://github.com/hppRC/kuon)
+
+# Install
+
+## Use cargo
+
+```base
+$ cargo install petit
+```
 
 # How to use
 

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use kuon::{OAuthToken, TwitterAPI};
-use std::path::PathBuf;
+use std::{option, path::PathBuf};
 use tokio::fs::File;
 use tokio::io::BufReader;
 
@@ -14,14 +14,15 @@ pub struct Context {
 
 impl Context {
     pub async fn new() -> Result<Self> {
-        let api_key = std::env::var("API_KEY")?;
-        let api_secret = std::env::var("API_SECRET_KEY")?;
+        let api_key = env!("API_KEY");
+        let api_secret = env!("API_SECRET_KEY");
+
         let client = Self::build_client(&api_key, &api_secret).await;
 
         Ok(Self {
             client,
-            api_key,
-            api_secret,
+            api_key: api_key.to_string(),
+            api_secret: api_secret.to_string(),
         })
     }
 

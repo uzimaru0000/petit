@@ -5,7 +5,7 @@ use crate::utils::terminal::create_terminal;
 use anyhow::{Context as _, Result};
 use clap::Clap;
 use termion::event::Key;
-use tui::widgets::{Block, BorderType, Borders};
+use tui::widgets::{Block, BorderType, Borders, List};
 use tui::{
     layout::{Alignment, Constraint, Layout},
     text::{Span, Spans},
@@ -24,7 +24,6 @@ impl Search {
             .with_context(|| "Please login. run \"petit login\"")?;
         let mut terminal = create_terminal()?;
         let mut events = Events::new();
-        let mut offset = 0;
         let mut input = Input {
             value: self.query.clone().unwrap_or_default(),
         };
@@ -55,16 +54,9 @@ impl Search {
                     .border_type(BorderType::Rounded)
                     .borders(Borders::ALL);
                 let tweet_widget = if tweet_list.is_empty() {
-                    Paragraph::new(vec![Spans::from(vec![Span::raw(
-                        "-- Input search word --",
-                    )])])
-                    .alignment(Alignment::Center)
-                    .block(result_block)
+                    List::new(vec![])
                 } else {
-                    tweet_list
-                        .view(&chunk[1])
-                        .block(result_block)
-                        .scroll((offset, 0))
+                    tweet_list.view(&chunk[1]).block(result_block)
                 };
                 f.render_widget(tweet_widget, chunk[1]);
             })?;
@@ -82,10 +74,10 @@ impl Search {
                 Some(Event::Input(Key::Backspace)) => {
                     input.value.pop();
                 }
-                Some(Event::Input(Key::Down)) => offset += 1,
-                Some(Event::Input(Key::Up)) => {
-                    offset = if offset == 0 { offset } else { offset - 1 }
-                }
+                // Some(Event::Input(Key::Down)) => offset += 1,
+                // Some(Event::Input(Key::Up)) => {
+                //     offset = if offset == 0 { offset } else { offset - 1 }
+                // }
                 Some(_) => {}
                 None => {
                     break;

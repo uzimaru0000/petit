@@ -1,3 +1,5 @@
+use std::cmp::{max, min};
+
 use crate::component::Component;
 use crate::context::Context;
 use crate::utils::{
@@ -11,7 +13,8 @@ use maplit::hashmap;
 use termion::event::Key;
 use tui::{
     layout::Rect,
-    widgets::{Block, BorderType, Borders, Paragraph},
+    style::{Color, Style},
+    widgets::{Block, BorderType, Borders, List, ListState, Paragraph},
 };
 
 const ENDPOINT: &str = "https://api.twitter.com/1.1/statuses/home_timeline.json";
@@ -28,31 +31,90 @@ impl TimeLine {
         let mut terminal = create_terminal()?;
         let mut events = Events::new();
         let mut count = 0;
-        let mut offset = 0;
+        let mut list_state = ListState::default();
         let mut tweet_list = Self::get_tweet(&client, None).await?;
 
         loop {
             terminal.draw(|f| {
                 let size = f.size();
-                let tweet = Self::render(&tweet_list, &size, (offset, 0));
-                f.render_widget(tweet, size);
+                let tweet_view = Self::render(&tweet_list, &size);
+                f.render_stateful_widget(tweet_view, size, &mut list_state);
             })?;
 
             match events.next().await.with_context(|| "Events error")? {
                 Event::Input(i) => match i {
+                    Key::Esc => {
+                        list_state.select(None);
+                    }
                     Key::Char('q') => {
                         break;
                     }
-                    Key::Char('j') => offset += 1,
-                    Key::Char('k') => offset = if offset == 0 { offset } else { offset - 1 },
+                    Key::Char('j') | Key::Up => {
+                        list_state.select(Some(
+                            list_state
+                                .selected()
+                                .map(|x| min(x + 1, tweet_list.len() - 1))
+                                .unwrap_or_default(),
+                        ));
+                    }
+                    Key::Char('k') | Key::Down => {
+                        list_state.select(Some(
+                            list_state
+                                .selected()
+                                .map(|x| x.checked_sub(1).unwrap_or(0))
+                                .unwrap_or_default(),
+                        ));
+                    }
+                    Key::Char('f') => {
+                        let selected_tweet = list_state
+                            .selected()
+                            .and_then(|x| tweet_list.get(x))
+                            .and_then(|x| x.id_str.clone());
+
+                        if let Some(id) = selected_tweet {
+                            client.favorite(&id).await?;
+                            tweet_list
+                                .iter_mut()
+                                .filter(|x| {
+                                    if let Some(id_str) = x.id_str.clone() {
+                                        id_str == id
+                                    } else {
+                                        false
+                                    }
+                                })
+                                .for_each(|x| x.favorite_count += 1);
+                        }
+                    }
+                    Key::Char('r') => {
+                        let selected_tweet = list_state
+                            .selected()
+                            .and_then(|x| tweet_list.get(x))
+                            .and_then(|x| x.id_str.clone());
+
+                        if let Some(id) = selected_tweet {
+                            client.retweet(&id).await?;
+                            tweet_list
+                                .iter_mut()
+                                .filter(|x| {
+                                    if let Some(id_str) = x.id_str.clone() {
+                                        id_str == id
+                                    } else {
+                                        false
+                                    }
+                                })
+                                .for_each(|x| x.retweet_count += 1);
+                        }
+                    }
                     _ => {}
                 },
                 Event::Tick => {
                     count += 1;
                     if count == 60 {
                         let since_id = tweet_list.get(0).and_then(|x| x.id_str.clone());
-                        tweet_list =
-                            [Self::get_tweet(&client, since_id).await?, tweet_list].concat();
+                        let new_tweet_list = Self::get_tweet(&client, since_id).await?;
+                        let new_tweet_list_num = new_tweet_list.len();
+                        tweet_list = [new_tweet_list, tweet_list].concat();
+                        list_state.select(list_state.selected().map(|x| x + new_tweet_list_num));
                         count = 0;
                     }
                 }
@@ -77,7 +139,7 @@ impl TimeLine {
         Ok(tweet_list)
     }
 
-    fn render<'a>(tweet_list: &Vec<Tweet>, area: &Rect, offset: (u16, u16)) -> Paragraph<'a> {
+    fn render<'a>(tweet_list: &Vec<Tweet>, area: &Rect) -> List<'a> {
         tweet_list
             .view(&area)
             .block(
@@ -86,6 +148,7 @@ impl TimeLine {
                     .border_type(BorderType::Rounded)
                     .borders(Borders::ALL),
             )
-            .scroll(offset)
+            .highlight_symbol(">>")
+            .highlight_style(Style::default().bg(Color::Rgb(0, 64, 128)))
     }
 }
