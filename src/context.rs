@@ -30,7 +30,7 @@ impl Context {
         let path = {
             let mut path = PathBuf::new();
             path.push(home_dir);
-            path.push(".kuon");
+            path.push(".petit");
             path
         };
         path
