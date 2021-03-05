@@ -14,8 +14,9 @@ impl Login {
     pub async fn run(&self, ctx: Context) -> Result<()> {
         let mut stdout = BufWriter::new(stdout());
 
-        if let Some(_) = ctx.client {
+        if ctx.client.is_some() {
             stdout.write_all(b"Already logged in!!").await?;
+            stdout.flush().await?;
             return Ok(());
         }
 
@@ -37,6 +38,9 @@ impl Login {
 
         let oauth_token = api.oauth_token();
         Self::write_token(&oauth_token).await?;
+
+        stdout.write_all(b"Logged in successfully!").await?;
+        stdout.flush().await?;
 
         Ok(())
     }
