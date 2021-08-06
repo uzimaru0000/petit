@@ -12,7 +12,7 @@ exclude = ["*.png"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-kuon = "0.0.18"
+kuon = "0.0.27"
 clap = "3.0.0-beta.2"
 tokio = "1.2.0"
 anyhow = "1.0.38"
