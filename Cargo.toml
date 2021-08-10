@@ -3,11 +3,16 @@ name = "petit"
 version = "0.0.1"
 authors = ["uzimaru0000 <shuji365630@gmail.com>"]
 edition = "2018"
+categories = ["command-line-utilities"]
+description = "A TUI Twitter client"
+license = "MIT"
+repository = "https://github.com/uzimaru0000/petit"
+exclude = ["*.png"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-kuon = "0.0.18"
+kuon = "0.0.27"
 clap = "3.0.0-beta.2"
 tokio = "1.2.0"
 anyhow = "1.0.38"
@@ -20,3 +25,4 @@ reqwest = "0.11.1"
 base64 = "0.13.0"
 unicode-width = "0.1.8"
 textwrap = "0.13.3"
+chrono = "0.4.19"
