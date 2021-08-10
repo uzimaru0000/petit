@@ -22,7 +22,7 @@ impl Login {
         let builder = TwitterAPI::builder()
             .api_key(ctx.api_key.clone())
             .api_secret_key(ctx.api_secret.clone());
-        let request_token = builder.pre_build(Callback::PIN).await?;
+        let request_token = builder.pre_build(Callback::Pin).await?;
 
         stdout
             .write_all(

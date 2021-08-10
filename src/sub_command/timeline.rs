@@ -1,23 +1,21 @@
-use std::cmp::{max, min};
+use std::cmp::min;
 
 use crate::component::Component;
-use crate::context::Context;
+use crate::context::{Cache, Context};
 use crate::utils::{
     event::{Event, Events},
     terminal::create_terminal,
 };
 use anyhow::{Context as _, Result};
+use chrono::Utc;
 use clap::Clap;
-use kuon::{Tweet, TwitterAPI};
-use maplit::hashmap;
+use kuon::{TrimTweet, TwitterAPI};
 use termion::event::Key;
 use tui::{
     layout::Rect,
     style::{Color, Style},
-    widgets::{Block, BorderType, Borders, List, ListState, Paragraph},
+    widgets::{Block, BorderType, Borders, List, ListState},
 };
-
-const ENDPOINT: &str = "https://api.twitter.com/1.1/statuses/home_timeline.json";
 
 #[derive(Debug, Clap)]
 #[clap(name = "tl")]
@@ -30,9 +28,22 @@ impl TimeLine {
             .with_context(|| "Please login. run \"petit login\"")?;
         let mut terminal = create_terminal()?;
         let mut events = Events::new();
-        let mut count = 0;
+        let mut count = ctx.cache.as_ref().map(|x| x.count).unwrap_or(0);
         let mut list_state = ListState::default();
-        let mut tweet_list = Self::get_tweet(&client, None).await?;
+        let mut tweet_list = if ctx
+            .cache
+            .as_ref()
+            .and_then(|x| x.latest_call)
+            .map(|x| Self::is_latest_request(x))
+            .unwrap_or(false)
+        {
+            ctx.cache
+                .as_ref()
+                .map(|x| x.timeline.clone())
+                .unwrap_or_default()
+        } else {
+            Self::get_tweet(&client, None).await?
+        };
 
         loop {
             terminal.draw(|f| {
@@ -47,6 +58,11 @@ impl TimeLine {
                         list_state.select(None);
                     }
                     Key::Char('q') => {
+                        let maybe_cache = ctx.cache.clone();
+                        if let Some(mut cache) = maybe_cache {
+                            cache.count = count;
+                            Context::save_cache(&cache).await?;
+                        }
                         break;
                     }
                     Key::Char('j') | Key::Up => {
@@ -72,7 +88,7 @@ impl TimeLine {
                             .and_then(|x| x.id_str.clone());
 
                         if let Some(id) = selected_tweet {
-                            client.favorite(&id).await?;
+                            client.favorite().id(&id).send().await?;
                             tweet_list
                                 .iter_mut()
                                 .filter(|x| {
@@ -92,7 +108,7 @@ impl TimeLine {
                             .and_then(|x| x.id_str.clone());
 
                         if let Some(id) = selected_tweet {
-                            client.retweet(&id).await?;
+                            client.retweet().id(&id).send().await?;
                             tweet_list
                                 .iter_mut()
                                 .filter(|x| {
@@ -124,22 +140,25 @@ impl TimeLine {
         Ok(())
     }
 
-    async fn get_tweet(client: &TwitterAPI, since_id: Option<String>) -> Result<Vec<Tweet>> {
-        let mut params = since_id
-            .as_deref()
-            .map(|x| {
-                hashmap! {
-                    "since_id" => x
-                }
-            })
-            .unwrap_or_default();
-        params.insert("count", "200");
+    async fn get_tweet(client: &TwitterAPI, since_id: Option<String>) -> Result<Vec<TrimTweet>> {
+        let mut timeline = client.home_timeline();
+        if let Some(id) = since_id.and_then(|x| x.parse::<u64>().ok()) {
+            timeline.since_id(id);
+        }
+        let tweet_list = timeline.count(30).send().await?;
 
-        let tweet_list: Vec<kuon::Tweet> = client.raw_get(ENDPOINT, &params, None).await?;
+        let now = chrono::Utc::now();
+        let cache = Cache {
+            latest_call: Some(now),
+            timeline: tweet_list.clone(),
+            count: 0,
+        };
+        Context::save_cache(&cache).await?;
+
         Ok(tweet_list)
     }
 
-    fn render<'a>(tweet_list: &Vec<Tweet>, area: &Rect) -> List<'a> {
+    fn render<'a>(tweet_list: &Vec<TrimTweet>, area: &Rect) -> List<'a> {
         tweet_list
             .view(&area)
             .block(
@@ -151,4 +170,17 @@ impl TimeLine {
             .highlight_symbol(">>")
             .highlight_style(Style::default().bg(Color::Rgb(0, 64, 128)))
     }
+
+    fn is_latest_request(latest_call: chrono::DateTime<Utc>) -> bool {
+        let now = Utc::now();
+        let delta = now - latest_call;
+
+        delta.num_minutes() < 1
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_is_latest_request() {}
 }

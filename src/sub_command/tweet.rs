@@ -17,7 +17,7 @@ impl Tweet {
             .client
             .with_context(|| "Please login. run \"kuon login\"")?;
 
-        client.tweet(&self.content).await?;
+        client.tweet().status(&self.content).send().await?;
         stdout.write_all(b"success!").await?;
 
         Ok(())

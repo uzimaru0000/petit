@@ -5,12 +5,8 @@ use crate::utils::terminal::create_terminal;
 use anyhow::{Context as _, Result};
 use clap::Clap;
 use termion::event::Key;
+use tui::layout::{Constraint, Layout};
 use tui::widgets::{Block, BorderType, Borders, List};
-use tui::{
-    layout::{Alignment, Constraint, Layout},
-    text::{Span, Spans},
-    widgets::Paragraph,
-};
 
 #[derive(Debug, Clap)]
 pub struct Search {
@@ -30,7 +26,12 @@ impl Search {
         let mut tweet_list = if input.value.is_empty() {
             Vec::new()
         } else {
-            client.search_tweets(input.value.as_str()).await?.statuses
+            client
+                .search_tweets()
+                .q(input.value.as_str())
+                .send()
+                .await?
+                .statuses
         };
 
         loop {
@@ -66,7 +67,12 @@ impl Search {
                     break;
                 }
                 Some(Event::Input(Key::Char('\n'))) => {
-                    tweet_list = client.search_tweets(input.value.as_str()).await?.statuses;
+                    tweet_list = client
+                        .search_tweets()
+                        .q(input.value.as_str())
+                        .send()
+                        .await?
+                        .statuses;
                 }
                 Some(Event::Input(Key::Char(c))) => {
                     input.value.push(c);
