@@ -4,7 +4,7 @@ use crate::{context::Context, sub_command::SubCommand};
 use anyhow::Result;
 
 #[derive(Debug, Clap)]
-#[clap(version = "0.0.1", author = "uzimaru0000<shuji365630@gmail.com>")]
+#[clap(version = "0.0.2", author = "uzimaru0000<shuji365630@gmail.com>")]
 pub struct Application {
     #[clap(subcommand)]
     pub subcmd: SubCommand,
