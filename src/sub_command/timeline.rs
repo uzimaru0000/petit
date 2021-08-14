@@ -11,6 +11,7 @@ use chrono::Utc;
 use clap::Clap;
 use kuon::{TrimTweet, TwitterAPI};
 use termion::event::Key;
+use tokio::io::{stdout, AsyncWriteExt, BufWriter, Stdout};
 use tui::{
     layout::Rect,
     style::{Color, Style},
@@ -19,10 +20,41 @@ use tui::{
 
 #[derive(Debug, Clap)]
 #[clap(name = "tl")]
-pub struct TimeLine {}
+pub struct TimeLine {
+    #[clap(long)]
+    tui: bool,
+}
 
 impl TimeLine {
     pub async fn run(&self, ctx: Context) -> Result<()> {
+        if self.tui {
+            self.tui_mode(ctx).await?;
+        } else {
+            let client = ctx
+                .client
+                .with_context(|| "Please login. run \"petit login\"")?;
+            let tweet_list = if ctx
+                .cache
+                .as_ref()
+                .and_then(|x| x.latest_call)
+                .map(|x| Self::is_latest_request(x))
+                .unwrap_or(false)
+            {
+                ctx.cache
+                    .as_ref()
+                    .map(|x| x.timeline.clone())
+                    .unwrap_or_default()
+            } else {
+                Self::get_tweet(&client, None).await?
+            };
+            let mut stdout = BufWriter::new(stdout());
+            Self::output(&mut stdout, &tweet_list).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn tui_mode(&self, ctx: Context) -> Result<()> {
         let client = ctx
             .client
             .with_context(|| "Please login. run \"petit login\"")?;
@@ -171,16 +203,42 @@ impl TimeLine {
             .highlight_style(Style::default().bg(Color::Rgb(0, 64, 128)))
     }
 
+    async fn output(stdout: &mut BufWriter<Stdout>, tweet_list: &Vec<TrimTweet>) -> Result<()> {
+        let output_line = tweet_list.iter().map(|x| Self::output_item(x));
+        for line in output_line {
+            stdout.write_all(line.as_bytes()).await?;
+        }
+        stdout.flush().await?;
+
+        Ok(())
+    }
+
+    fn output_item(tweet: &TrimTweet) -> String {
+        let retweet = tweet.retweeted_status.as_ref();
+        let user_name = retweet
+            .and_then(|x| x.user.name.clone())
+            .unwrap_or_else(|| tweet.user.name.clone().unwrap());
+        let screen_name = retweet
+            .and_then(|x| x.user.screen_name.clone())
+            .unwrap_or_else(|| tweet.user.screen_name.clone().unwrap());
+        let text = retweet
+            .map(|x| x.text.clone())
+            .unwrap_or_else(|| tweet.text.clone());
+        let retweet_user = retweet.and_then(|_| tweet.user.screen_name.clone());
+
+        format!(
+            "{}\t@{}\t{}\t{}\n",
+            user_name,
+            screen_name,
+            text,
+            retweet_user.unwrap_or_default()
+        )
+    }
+
     fn is_latest_request(latest_call: chrono::DateTime<Utc>) -> bool {
         let now = Utc::now();
         let delta = now - latest_call;
 
         delta.num_minutes() < 1
     }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_is_latest_request() {}
 }
