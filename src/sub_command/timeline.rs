@@ -1,173 +1,64 @@
-use std::cmp::min;
+use std::str::FromStr;
 
-use crate::component::Component;
+use crate::component::tweet::TweetView;
 use crate::context::{Cache, Context};
-use crate::utils::{
-    event::{Event, Events},
-    terminal::create_terminal,
-};
 use anyhow::{Context as _, Result};
 use chrono::Utc;
 use clap::Clap;
+use colored::{self, Colorize};
 use kuon::{TrimTweet, TwitterAPI};
-use termion::event::Key;
 use tokio::io::{stdout, AsyncWriteExt, BufWriter, Stdout};
-use tui::{
-    layout::Rect,
-    style::{Color, Style},
-    widgets::{Block, BorderType, Borders, List, ListState},
-};
+
+#[derive(Debug)]
+enum DisplayType {
+    Standard,
+    Json,
+    Csv,
+}
+
+impl FromStr for DisplayType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "standard" => Ok(Self::Standard),
+            "json" => Ok(Self::Json),
+            "csv" => Ok(Self::Csv),
+            _ => Err(String::from("no match string")),
+        }
+    }
+}
 
 #[derive(Debug, Clap)]
 #[clap(name = "tl")]
 pub struct TimeLine {
-    #[clap(long)]
-    tui: bool,
+    #[clap(long, short, default_value = "standard")]
+    display: DisplayType,
+    id: Option<String>,
 }
 
 impl TimeLine {
     pub async fn run(&self, ctx: Context) -> Result<()> {
-        if self.tui {
-            self.tui_mode(ctx).await?;
-        } else {
-            let client = ctx
-                .client
-                .with_context(|| "Please login. run \"petit login\"")?;
-            let tweet_list = if ctx
+        let client = ctx
+            .client
+            .with_context(|| "Please login. run \"petit login\"")?;
+        let tweet_list = if self.id.is_none()
+            && ctx
                 .cache
                 .as_ref()
                 .and_then(|x| x.latest_call)
                 .map(|x| Self::is_latest_request(x))
                 .unwrap_or(false)
-            {
-                ctx.cache
-                    .as_ref()
-                    .map(|x| x.timeline.clone())
-                    .unwrap_or_default()
-            } else {
-                Self::get_tweet(&client, None).await?
-            };
-            let mut stdout = BufWriter::new(stdout());
-            Self::output(&mut stdout, &tweet_list).await?;
-        }
-
-        Ok(())
-    }
-
-    async fn tui_mode(&self, ctx: Context) -> Result<()> {
-        let client = ctx
-            .client
-            .with_context(|| "Please login. run \"petit login\"")?;
-        let mut terminal = create_terminal()?;
-        let mut events = Events::new();
-        let mut count = ctx.cache.as_ref().map(|x| x.count).unwrap_or(0);
-        let mut list_state = ListState::default();
-        let mut tweet_list = if ctx
-            .cache
-            .as_ref()
-            .and_then(|x| x.latest_call)
-            .map(|x| Self::is_latest_request(x))
-            .unwrap_or(false)
         {
             ctx.cache
                 .as_ref()
                 .map(|x| x.timeline.clone())
                 .unwrap_or_default()
         } else {
-            Self::get_tweet(&client, None).await?
+            Self::get_tweet(&client, self.id.clone()).await?
         };
-
-        loop {
-            terminal.draw(|f| {
-                let size = f.size();
-                let tweet_view = Self::render(&tweet_list, &size);
-                f.render_stateful_widget(tweet_view, size, &mut list_state);
-            })?;
-
-            match events.next().await.with_context(|| "Events error")? {
-                Event::Input(i) => match i {
-                    Key::Esc => {
-                        list_state.select(None);
-                    }
-                    Key::Char('q') => {
-                        let maybe_cache = ctx.cache.clone();
-                        if let Some(mut cache) = maybe_cache {
-                            cache.count = count;
-                            Context::save_cache(&cache).await?;
-                        }
-                        break;
-                    }
-                    Key::Char('j') | Key::Up => {
-                        list_state.select(Some(
-                            list_state
-                                .selected()
-                                .map(|x| min(x + 1, tweet_list.len() - 1))
-                                .unwrap_or_default(),
-                        ));
-                    }
-                    Key::Char('k') | Key::Down => {
-                        list_state.select(Some(
-                            list_state
-                                .selected()
-                                .map(|x| x.checked_sub(1).unwrap_or(0))
-                                .unwrap_or_default(),
-                        ));
-                    }
-                    Key::Char('f') => {
-                        let selected_tweet = list_state
-                            .selected()
-                            .and_then(|x| tweet_list.get(x))
-                            .and_then(|x| x.id_str.clone());
-
-                        if let Some(id) = selected_tweet {
-                            client.favorite().id(&id).send().await?;
-                            tweet_list
-                                .iter_mut()
-                                .filter(|x| {
-                                    if let Some(id_str) = x.id_str.clone() {
-                                        id_str == id
-                                    } else {
-                                        false
-                                    }
-                                })
-                                .for_each(|x| x.favorite_count += 1);
-                        }
-                    }
-                    Key::Char('r') => {
-                        let selected_tweet = list_state
-                            .selected()
-                            .and_then(|x| tweet_list.get(x))
-                            .and_then(|x| x.id_str.clone());
-
-                        if let Some(id) = selected_tweet {
-                            client.retweet().id(&id).send().await?;
-                            tweet_list
-                                .iter_mut()
-                                .filter(|x| {
-                                    if let Some(id_str) = x.id_str.clone() {
-                                        id_str == id
-                                    } else {
-                                        false
-                                    }
-                                })
-                                .for_each(|x| x.retweet_count += 1);
-                        }
-                    }
-                    _ => {}
-                },
-                Event::Tick => {
-                    count += 1;
-                    if count == 60 {
-                        let since_id = tweet_list.get(0).and_then(|x| x.id_str.clone());
-                        let new_tweet_list = Self::get_tweet(&client, since_id).await?;
-                        let new_tweet_list_num = new_tweet_list.len();
-                        tweet_list = [new_tweet_list, tweet_list].concat();
-                        list_state.select(list_state.selected().map(|x| x + new_tweet_list_num));
-                        count = 0;
-                    }
-                }
-            }
-        }
+        let mut stdout = BufWriter::new(stdout());
+        Self::output(&mut stdout, &tweet_list, &self.display).await?;
 
         Ok(())
     }
@@ -190,49 +81,54 @@ impl TimeLine {
         Ok(tweet_list)
     }
 
-    fn render<'a>(tweet_list: &Vec<TrimTweet>, area: &Rect) -> List<'a> {
-        tweet_list
-            .view(&area)
-            .block(
-                Block::default()
-                    .title("TimeLine")
-                    .border_type(BorderType::Rounded)
-                    .borders(Borders::ALL),
-            )
-            .highlight_symbol(">>")
-            .highlight_style(Style::default().bg(Color::Rgb(0, 64, 128)))
-    }
-
-    async fn output(stdout: &mut BufWriter<Stdout>, tweet_list: &Vec<TrimTweet>) -> Result<()> {
-        let output_line = tweet_list.iter().map(|x| Self::output_item(x));
-        for line in output_line {
-            stdout.write_all(line.as_bytes()).await?;
+    async fn output(
+        stdout: &mut BufWriter<Stdout>,
+        tweet_list: &Vec<TrimTweet>,
+        display: &DisplayType,
+    ) -> Result<()> {
+        match display {
+            &DisplayType::Standard => {
+                let output_line = tweet_list.iter().map(|x| TweetView::from(x)).map(|x| {
+                    format!(
+                        "{} {} {}\n {}\n\n",
+                        x.user_name,
+                        format!("@{}", x.screen_name).bright_red(),
+                        x.retweet_user_name
+                            .map(|x| format!("RT:@{}", x))
+                            .unwrap_or_default()
+                            .bright_green(),
+                        x.tweet,
+                    )
+                });
+                for line in output_line {
+                    stdout.write_all(line.as_bytes()).await?;
+                }
+            }
+            &DisplayType::Json => {
+                let json = serde_json::to_string(&tweet_list)?;
+                stdout.write_all(json.as_bytes()).await?;
+            }
+            &DisplayType::Csv => {
+                let output_line = tweet_list.iter().map(|x| TweetView::from(x)).map(|x| {
+                    format!(
+                        "{}\t{}\t{}\t{}{}\n",
+                        x.id,
+                        x.user_name,
+                        x.screen_name,
+                        x.tweet.replace("\n", " "),
+                        x.retweet_user_name
+                            .as_ref()
+                            .map(|x| String::from("\t") + x)
+                            .unwrap_or_default()
+                    )
+                });
+                for line in output_line {
+                    stdout.write_all(line.as_bytes()).await?;
+                }
+            }
         }
-        stdout.flush().await?;
 
-        Ok(())
-    }
-
-    fn output_item(tweet: &TrimTweet) -> String {
-        let retweet = tweet.retweeted_status.as_ref();
-        let user_name = retweet
-            .and_then(|x| x.user.name.clone())
-            .unwrap_or_else(|| tweet.user.name.clone().unwrap());
-        let screen_name = retweet
-            .and_then(|x| x.user.screen_name.clone())
-            .unwrap_or_else(|| tweet.user.screen_name.clone().unwrap());
-        let text = retweet
-            .map(|x| x.text.clone())
-            .unwrap_or_else(|| tweet.text.clone());
-        let retweet_user = retweet.and_then(|_| tweet.user.screen_name.clone());
-
-        format!(
-            "{}\t@{}\t{}\t{}\n",
-            user_name,
-            screen_name,
-            text,
-            retweet_user.unwrap_or_default()
-        )
+        stdout.flush().await.with_context(|| "Output Error")
     }
 
     fn is_latest_request(latest_call: chrono::DateTime<Utc>) -> bool {

@@ -1,7 +1,7 @@
 use tui::layout::Rect;
 
 pub mod input;
-mod tweet;
+pub mod tweet;
 
 pub trait Component<W: tui::widgets::Widget> {
     fn view(&self, area: &Rect) -> W;
